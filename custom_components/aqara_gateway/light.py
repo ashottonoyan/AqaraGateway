@@ -61,6 +61,13 @@ class GatewayLight(GatewayGenericDevice, LightEntity):
         if self.device['type'] == 'gateway':
             self._attr_supported_features = SUPPORT_COLOR | SUPPORT_BRIGHTNESS
 
+        for entry in self.gateway.hass.config_entries.async_entries():
+            if entry.domain == "homekit":
+                entity_id = f"light.{self._unique_id}"
+                if entity_id in entry.options["filter"]["include_entities"]:
+                    self._homekit_entry_id = entry.entry_id
+                    break
+
     @property
     def is_on(self) -> bool:
         """return state """
@@ -79,6 +86,7 @@ class GatewayLight(GatewayGenericDevice, LightEntity):
 
     def update(self, data: dict = None):
         """ update attribue in data """
+        _previous_attr_supported_features = self._attr_supported_features
         for key, value in data.items():
             if key == CHIP_TEMPERATURE:
                 self._chip_temperature = value
@@ -126,6 +134,13 @@ class GatewayLight(GatewayGenericDevice, LightEntity):
                         self._attr_brightness = rgb.pop()
                     self._attr_hs_color = color_util.color_RGB_to_hs(*rgb)
         self.schedule_update_ha_state()
+
+        if self._attr_supported_features > 0:
+            if _previous_attr_supported_features != self._attr_supported_features:
+                if self._homekit_entry_id:
+                    self.hass.async_create_task(
+                        self.hass.config_entries.async_reload(self._homekit_entry_id)
+                    )
 
     def turn_on(self, **kwargs):
         """Turn the light on."""
